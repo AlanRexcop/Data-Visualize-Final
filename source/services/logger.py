@@ -17,7 +17,7 @@ def log_interaction(history, prompt, ai_explanation, ai_code, final_code, was_ed
     entry = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "prompt": prompt,
-        "ai_explanation": ai_explanation,
+        "explanation": ai_explanation,
         "ai_code": ai_code,
         "final_code": final_code,
         "was_edited": was_edited,
