@@ -31,5 +31,3 @@ The environment is fully configured for:
 2. **EDA:** Generating high-quality statistical charts.
 3. **Notebook Generation:** Creating ready-to-use `.ipynb` files for handover.
 
-## Full Package List
-The full frozen list of all dependencies (including sub-dependencies) is stored in `CONDA_ENV_DETAILS.txt`.
