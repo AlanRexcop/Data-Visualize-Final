@@ -74,16 +74,15 @@ def get_ai_analysis(api_key, prompt, mode="Explorer", context=None, observation=
     client = genai.Client(api_key=api_key)
     
     context_str = f"\nBối cảnh các bước trước:\n{context}\n" if context else ""
-    react_context = f"\nKết quả thu được từ lệnh in trước đó (Observation):\n{observation}\n" if observation else ""
+    react_context = f"\nKết quả thu được từ lệnh in trước đó (Observation):\n{observation}\n" if observation else "" 
     
     # LUẬT THÉP BẮT BUỘC DÀNH CHO AI
     vn_enforcement = """
     CÁC LUẬT THÉP BẮT BUỘC (NẾU VI PHẠM SẼ BỊ PHẠT):
     1. TIẾNG VIỆT 100%: Dòng suy nghĩ (thought), báo cáo (report), và TẤT CẢ các chú thích/comment trong code Python (bắt đầu bằng #) PHẢI được viết bằng TIẾNG VIỆT.
     2. CẤM MOCK DATA: Biến dataframe `df` ĐÃ ĐƯỢC KHỞI TẠO SẴN TRONG MÔI TRƯỜNG. Tuyệt đối KHÔNG tạo dummy data. KHÔNG gọi `pd.DataFrame(...)` hoặc `pd.read_csv(...)`.
-    3. MÔI TRƯỜNG ĐỘC LẬP BỊ XÓA SAU MỖI BƯỚC: Code của bạn chạy trong môi trường độc lập. Các biến tạo ra ở bước trước (VD: `df_filtered`) SẼ BỊ XÓA SẠCH ở bước sau. Do đó:
-       - Nếu bạn là Visualizer, bạn PHẢI TỰ VIẾT LẠI đoạn code lọc/xử lý dữ liệu từ `df` gốc. Không được gọi lại tên biến của Explorer.
-       - LUÔN TẠO BẢN SAO nếu cần biến đổi dữ liệu (ví dụ: `df_plot = df.copy()`), tuyệt đối KHÔNG chỉnh sửa đè trực tiếp lên `df` (không dùng `inplace=True`).
+    3. MÔI TRƯỜNG ĐỘC LẬP: Các biến tạo ra ở bước trước (VD: `df_time_series`) SẼ BỊ XÓA SẠCH ở bước sau. Do đó, Visualizer HÃY ĐỌC PHẦN "Code đã chạy" của Explorer trong Observation để COPY/VIẾT LẠI logic xử lý dữ liệu (groupby, filter...) từ `df` gốc.
+    4. CẤM CẮT XÉN DỮ LIỆU TỔNG HỢP: Khi Explorer in các bảng thống kê hoặc dữ liệu đã được nhóm (groupby), TUYỆT ĐỐI KHÔNG DÙNG `.head()`. Hãy in bằng `print(df_grouped.to_string())` để hiển thị toàn bộ kết quả, nhằm đảm bảo Visualizer và Analyst có đầy đủ số liệu của tất cả các tháng/năm.
     """
     
     if mode == "Explorer":

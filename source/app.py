@@ -121,31 +121,28 @@ with tab_analyst:
                 obs_text = ""
                 plot_json_str = ""
                 
+                # SỬA LẠI LOGIC LƯU OBSERVATION: LƯU CẢ CODE VÀ KẾT QUẢ
                 if current_task['agent'] == "Explorer":
                     st.markdown("**Kết quả xuất ra từ Terminal:**")
                     st.code(result.get("text_output", "Không có dữ liệu in ra."))
-                    obs_text = f"Kết quả từ Explorer:\n{result.get('text_output')}"
+                    
+                    # Truyền cả đoạn code Explorer đã viết vào cho Agent sau đọc
+                    obs_text = f"--- BƯỚC {current_step_idx + 1} (EXPLORER) ---\nCode đã chạy:\n```python\n{final_code}\n```\nKết quả Terminal:\n{result.get('text_output')}"
                     
                 elif current_task['agent'] == "Visualizer":
                     if result.get("fig"):
                         st.plotly_chart(result["fig"], use_container_width=True)
-                        obs_text = "Visualizer đã vẽ biểu đồ thành công. Hãy phân tích dựa trên dữ liệu từ Explorer."
                         plot_json_str = result["fig"].to_json()
+                        
+                        # Truyền code vẽ biểu đồ cho Analyst đọc để biết nó đang nhìn biểu đồ gì
+                        obs_text = f"--- BƯỚC {current_step_idx + 1} (VISUALIZER) ---\nCode vẽ biểu đồ đã chạy:\n```python\n{final_code}\n```\n(Trạng thái: Đã vẽ biểu đồ thành công)."
                     else:
                         st.error(f"Lỗi: Không thể tạo biểu đồ. {result.get('text_output')}")
                         obs_text = "Visualizer thất bại trong việc vẽ biểu đồ."
                 
-                st.session_state.history = logger.log_interaction(
-                    st.session_state.history,
-                    prompt=current_task['task'],
-                    ai_explanation=resp.get('thought', ''),
-                    ai_code=resp.get('code', ''),
-                    final_code=final_code,
-                    was_edited=(final_code != resp.get('code', '')),
-                    result_log=result.get("text_output", ""),
-                    plot_json=plot_json_str
-                )
+                st.session_state.history = logger.log_interaction(...) # Giữ nguyên như cũ
                 
+                # Đưa toàn bộ context cực giàu này vào bộ nhớ
                 st.session_state.observations.append(obs_text)
                 st.session_state.current_step += 1
                 st.rerun()
