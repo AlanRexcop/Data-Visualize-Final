@@ -79,12 +79,18 @@ with tab_analyst:
         
         st.markdown("---")
         st.write(f"### 🗺️ Kế hoạch hiện tại: Bước {current_step_idx + 1} / {len(plan)}")
-        for p in plan:
-            icon = "✅" if p['step'] <= current_step_idx else "⏳"
-            if p['step'] == current_step_idx + 1:
-                st.markdown(f"**{icon} Bước {p['step']} ({p['agent']}): {p['task']}** 👈 *(Đang xử lý)*")
+        for i, p in enumerate(plan):
+            # Sử dụng p.get('step') và i+1 làm phương án dự phòng
+            p_step = p.get('step', i + 1)
+            p_agent = p.get('agent', 'Unknown')
+            p_task = p.get('task', 'N/A')
+            
+            icon = "✅" if p_step <= current_step_idx else "⏳"
+            
+            if p_step == current_step_idx + 1:
+                st.markdown(f"**{icon} Bước {p_step} ({p_agent}): {p_task}** 👈 *(Đang xử lý)*")
             else:
-                st.write(f"{icon} Bước {p['step']} ({p['agent']}): {p['task']}")
+                st.write(f"{icon} Bước {p_step} ({p_agent}): {p_task}")
             
         st.markdown("---")
         st.subheader(f"🤖 Đang chờ Đặc vụ: {current_task['agent']}")

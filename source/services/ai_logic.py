@@ -2,35 +2,72 @@ import json
 from google import genai
 
 def get_ai_plan(api_key, user_request, metadata_str):
+    # Lưu ý: Bạn đề cập Gemini 3.1 Flash Lite, nếu ý bạn là 1.5 Flash hoặc bản mới nhất
+    # hãy đảm bảo tên model chính xác. Ở đây tôi dùng gemini-1.5-flash để ổn định.
     client = genai.Client(api_key=api_key)
     
     system_prompt = f"""
-    Bạn là một AI Quản lý dự án (Orchestrator) phân tích dữ liệu CPI tại Việt Nam.
-    Hãy chia yêu cầu của người dùng thành một kế hoạch gồm các bước logic.
-    
-    THÔNG TIN DỮ LIỆU HIỆN CÓ (Đã được load sẵn vào biến dataframe `df`):
+    Bạn là Chuyên gia Lập kế hoạch (Orchestrator). 
+    Nhiệm vụ của bạn là chia yêu cầu của người dùng thành một quy trình gồm NHIỀU BƯỚC, sử dụng các đặc vụ chuyên biệt.
+
+    DỮ LIỆU CỦA BẠN:
     {metadata_str}
-    
-    Bạn có 3 Agents (Đặc vụ) để sử dụng:
-    1. "Explorer": Dùng pandas và lệnh print() để khám phá, lọc dữ liệu (Không vẽ biểu đồ).
-    2. "Visualizer": Dùng Plotly để vẽ biểu đồ từ dữ liệu (Chỉ vẽ, gán vào biến `fig`).
-    3. "Analyst": Đọc các kết quả phía trên và viết báo cáo bằng chữ (Không viết code).
-    
-    YÊU CẦU BẮT BUỘC: 
-    - Các mô tả 'task' PHẢI viết hoàn toàn bằng TIẾNG VIỆT, giải thích rõ sẽ làm gì với các cột nào.
-    - Output CHỈ LÀ mảng JSON.
+
+    DANH SÁCH ĐẶC VỤ:
+    1. "Explorer": CHỈ dùng để tính toán số liệu, lọc dữ liệu, nhóm (aggregation) và in kết quả (print). KHÔNG VẼ BIỂU ĐỒ.
+    2. "Visualizer": CHỈ dùng để vẽ biểu đồ (Plotly) dựa trên các tính toán từ Explorer.
+    3. "Analyst": CHỈ dùng để viết báo cáo giải thích kết quả cuối cùng. KHÔNG VIẾT CODE.
+
+    QUY TẮC CHIA BƯỚC (BẮT BUỘC):
+    - Nếu người dùng yêu cầu "khám phá/tính toán" -> Phải có bước của Explorer.
+    - Nếu người dùng yêu cầu "vẽ/plot/biểu đồ" -> BẮT BUỘC phải tách riêng một bước cho Visualizer.
+    - Nếu người dùng yêu cầu "giải thích/phân tích/báo cáo" -> BẮT BUỘC phải có bước cuối cho Analyst.
+    - TUYỆT ĐỐI KHÔNG gộp chung việc tính toán và vẽ biểu đồ vào một bước.
+
+    ĐỊNH DẠNG TRẢ VỀ: CHỈ trả về mảng JSON.
+    Mẫu: [
+        {{"step": 1, "agent": "Explorer", "task": "Tính tổng hợp CPI theo tháng..."}},
+        {{"step": 2, "agent": "Visualizer", "task": "Vẽ biểu đồ đường..."}},
+        {{"step": 3, "agent": "Analyst", "task": "Giải thích xu hướng..."}}
+    ]
     """
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=f"{system_prompt}\n\nYêu cầu của người dùng: {user_request}"
+        model="gemini-3.1-flash-lite", # Hoặc model bạn đang dùng
+        contents=f"{system_prompt}\n\nYêu cầu khách hàng: {user_request}"
     )
     
     try:
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_text)
-    except Exception as e:
-        return[{"step": 1, "agent": "Explorer", "task": f"Lỗi tạo kế hoạch, chuyển về khám phá. Yêu cầu: {user_request}"}]
+        raw_plan = json.loads(clean_text)
+        
+        # Hậu xử lý chuẩn hóa key
+        final_plan = []
+        for i, p in enumerate(raw_plan):
+            final_plan.append({
+                "step": i + 1,
+                "agent": p.get("agent", "Explorer"),
+                "task": p.get("task", "Thực hiện phân tích")
+            })
+        
+        # Kiểm tra nếu AI quá lười (chỉ trả về 1 bước trong khi yêu cầu có "plot" hoặc "giải thích")
+        # Đây là logic dự phòng (fallback)
+        keywords_plot = ['vẽ', 'plot', 'biểu đồ', 'graph', 'chart']
+        keywords_analyze = ['giải thích', 'phân tích', 'báo cáo', 'tại sao']
+        
+        has_plot = any(k in user_request.lower() for k in keywords_plot)
+        has_analyze = any(k in user_request.lower() for k in keywords_analyze)
+        
+        # Nếu AI chỉ trả về 1 bước nhưng yêu cầu phức tạp, ta chèn thêm bước thủ công (nếu cần)
+        if len(final_plan) == 1:
+            if has_plot:
+                final_plan.append({"step": 2, "agent": "Visualizer", "task": "Trực quan hóa kết quả đã tìm thấy."})
+            if has_analyze:
+                final_plan.append({"step": len(final_plan)+1, "agent": "Analyst", "task": "Phân tích và giải thích ý nghĩa số liệu."})
+
+        return final_plan
+    except:
+        return [{"step": 1, "agent": "Explorer", "task": "Khám phá dữ liệu tổng quát"}]
 
 
 def get_ai_analysis(api_key, prompt, mode="Explorer", context=None, observation=None, metadata_str=""):
@@ -106,7 +143,7 @@ def get_ai_analysis(api_key, prompt, mode="Explorer", context=None, observation=
         """
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.1-flash-lite",
         contents=f"{system_prompt}\n\nYêu cầu hiện tại: {prompt}"
     )
     
