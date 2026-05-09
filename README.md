@@ -4,10 +4,10 @@
 This project analyzes 22 years of Vietnam's Consumer Price Index (CPI) data (2002-2024). It consists of a data processing pipeline and a custom-built **AI Analyst Module** designed to meet strict academic standards for Data Visualization.
 
 ## 📁 Project Structure
+- `analysis/`: Contains the refined datasets (`CPI_final_for_powerbi.csv`).
 - `data/`: Contains the raw GSO data (`Long_cleaned.csv`).
-- `output/`: Processed data (`CPI_processed_data.csv`) and AI generated plots.
+- `output/`: Processed data and AI-generated audit logs/plots.
 - `scripts/`:
-  - `transform_data.py`: Pipeline to expand data to 4,400+ rows and 11 variables.
   - `ai_analyst_app.py`: The main Streamlit AI Dashboard.
 - `docs/`: Full project documentation, requirements, and environment details.
 
