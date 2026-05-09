@@ -27,7 +27,7 @@ The system should ideally be split into:
 - **Backend/API:**
     - **API AI:** Connects to a model (Gemini/OpenAI) to get code + explanations.
     - **API Execution:** Runs approved code on the **local machine** and returns logs/images.
-    - **API Logs:** Stores every request, code snippet, and result for audit.
+    - **API Logs:4** Stores every request, code snippet, and result for audit.
 
 ---
 
