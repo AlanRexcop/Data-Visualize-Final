@@ -28,5 +28,10 @@ class WorkflowState:
             json.dump(self.history, f, indent=4, ensure_ascii=False)
         return entry
 
+    def get_result(self, index):
+        if 0 <= index < len(self.history):
+            return self.history[index]
+        return None
+
     def get_history(self):
         return self.history
