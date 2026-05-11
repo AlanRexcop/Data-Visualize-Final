@@ -2,7 +2,7 @@
 import os
 import importlib.util
 import google.generativeai as genai
-from google.generativeai.types import content_types
+from google.generativeai import types
 from config import GOOGLE_API_KEY, GEMINI_MODEL, TOOLS_DIR, DATA_DIR
 
 # Initialize Google GenAI
@@ -118,10 +118,12 @@ class AIAnalystAgent:
                 
             # Send the tool output BACK to the AI to continue the conversation
             response = self.chat_session.send_message(
-                content_types.Part.from_function_response(
-                    name=func_name,
-                    response={"result": tool_result}
-                ),
+                content=[{
+                    "function_response": {
+                        "name": func_name,
+                        "response": {"result": tool_result}
+                    }
+                }],
                 generation_config=generation_config
             )
 
@@ -132,7 +134,7 @@ class AIAnalystAgent:
             for part in response.candidates[0].content.parts:
                 # Check for the 'thought' attribute specifically
                 if hasattr(part, "thought") and part.thought:
-                    thought_process += part.text + "\n"
+                    thought_process += part.thought + "\n"
                 # Some versions of the API/Models return reasoning in a detectable way
                 elif hasattr(part, "text") and "thought" in str(part).lower() and not response.text:
                      thought_process += part.text + "\n"
