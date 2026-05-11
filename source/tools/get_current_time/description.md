@@ -1,0 +1,2 @@
+Lấy ngày và giờ hiện tại của hệ thống.
+Sử dụng tool này khi người dùng hỏi về thời gian hiện tại, hoặc khi cần biết năm/tháng hiện tại để tính toán hoặc lọc dữ liệu (ví dụ: dữ liệu YTD, so sánh với năm nay).
