@@ -14,11 +14,16 @@ st.set_page_config(page_title="Local AI Analyst", layout="wide")
 if "agent" not in st.session_state:
     st.session_state.agent = AIAnalystAgent()
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages =[]
 if "data_registry" not in st.session_state:
     st.session_state.data_registry = DataRegistry()
 if "pending_code" not in st.session_state:
     st.session_state.pending_code = None
+# ADD THESE TWO LINES:
+if "last_execution_error" not in st.session_state:
+    st.session_state.last_execution_error = None
+if "auto_prompt" not in st.session_state:
+    st.session_state.auto_prompt = None
 
 # --- Custom CSS for AI Studio feel ---
 st.markdown("""
@@ -81,9 +86,17 @@ for msg in st.session_state.messages:
             st.info(f"Numerical Result: {msg['result']}")
 
 # --- Chat Input ---
-if prompt := st.chat_input("Hỏi tôi về dữ liệu hoặc yêu cầu phân tích..."):
-    # Clear pending code if new request comes in
+prompt = st.chat_input("Hỏi tôi về dữ liệu hoặc yêu cầu phân tích...")
+
+# Override prompt if triggered by the "Ask AI" button
+if st.session_state.auto_prompt:
+    prompt = st.session_state.auto_prompt
+    st.session_state.auto_prompt = None
+
+if prompt:
+    # Clear pending code and errors if a new request comes in
     st.session_state.pending_code = None
+    st.session_state.last_execution_error = None
     
     # Display user message
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -118,9 +131,14 @@ if prompt := st.chat_input("Hỏi tôi về dữ liệu hoặc yêu cầu phân 
                 st.rerun()
 
 # --- Human-in-the-Loop Code Review Area ---
+# --- Human-in-the-Loop Code Review Area ---
 if st.session_state.pending_code:
     st.divider()
     st.subheader("📝 Code Review (Phê duyệt thực thi)")
+    
+    # 1. Display persistent error if it exists
+    if st.session_state.last_execution_error:
+        st.error(f"⚠️ Lỗi thực thi lần trước:\n{st.session_state.last_execution_error}")
     
     # Editable code area
     edited_code = st.text_area(
@@ -129,7 +147,9 @@ if st.session_state.pending_code:
         height=250
     )
     
-    col_run, col_cancel = st.columns([1, 5])
+    # Added col_fix for the new button
+    col_run, col_fix, col_cancel = st.columns([1.5, 1.5, 4])
+    
     if col_run.button("✅ Approve & Run", type="primary"):
         # Load the actual dataframes for execution
         data_vars = st.session_state.data_registry.load_active_datasets(active_datasets)
@@ -139,17 +159,22 @@ if st.session_state.pending_code:
         
         # Log the session
         log_session({
-            "prompt": st.session_state.messages[-1]["content"],
+            "prompt": st.session_state.messages[-1]["content"] if st.session_state.messages else "",
             "raw_code": st.session_state.pending_code,
             "final_code": edited_code,
             "success": result["error"] is None,
             "error": result["error"]
         })
         
-        # Display Results
         if result["error"]:
-            st.error(f"Lỗi thực thi: {result['error']}")
+            # SAVE the error and keep the user's edited code in the text box
+            st.session_state.last_execution_error = result["error"]
+            st.session_state.pending_code = edited_code 
+            st.rerun()
         else:
+            # SUCCESS handling
+            st.session_state.last_execution_error = None
+            
             if result["fig_json"]:
                 st.plotly_chart(json.loads(result["fig_json"]), use_container_width=True)
             if result["result_data"]:
@@ -169,9 +194,17 @@ if st.session_state.pending_code:
             # Feed result back to LLM for final analysis
             st.session_state.agent.feed_execution_result(result)
             
-        st.session_state.pending_code = None
+            st.session_state.pending_code = None
+            st.rerun()
+
+    if col_fix.button("🪄 Ask AI to fix/review"):
+        if st.session_state.last_execution_error:
+            st.session_state.auto_prompt = f"Đoạn mã này bị lỗi:\n```\n{st.session_state.last_execution_error}\n```\n\nVui lòng sửa nó. Code hiện tại:\n```python\n{edited_code}\n```"
+        else:
+            st.session_state.auto_prompt = f"Vui lòng xem xét, tiếp tục hoặc tối ưu đoạn code hiện tại của tôi:\n```python\n{edited_code}\n```"
         st.rerun()
 
     if col_cancel.button("❌ Cancel"):
         st.session_state.pending_code = None
+        st.session_state.last_execution_error = None
         st.rerun()
