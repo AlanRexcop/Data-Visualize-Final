@@ -1,68 +1,65 @@
 import pandas as pd
 import os
-import numpy as np
 
-def clean_financial_value(val):
-    """
-    Hàm xử lý các định dạng đặc biệt: "1,784.49", "592.84M", "1.00%"
-    """
-    if pd.isna(val) or val == "":
-        return np.nan
-    
-    # Nếu đã là số thì trả về luôn
-    if isinstance(val, (int, float)):
+def clean_numeric(val):
+    """Hàm hỗ trợ làm sạch chuỗi số chứa dấu phẩy, ký hiệu %, và hậu tố M/B/K"""
+    if pd.isna(val):
         return val
-    
-    # Chuyển về string và làm sạch khoảng trắng, dấu ngoặc kép
-    s = str(val).replace('"', '').replace("'", "").strip()
-    
-    try:
-        # 1. Xử lý phần trăm
-        if '%' in s:
-            return float(s.replace('%', ''))
-        
-        # 2. Xử lý hậu tố Volume (M = Triệu, K = Nghìn)
-        if 'M' in s:
-            return float(s.replace('M', '').replace(',', '')) * 1_000_000
-        if 'K' in s:
-            return float(s.replace('K', '').replace(',', '')) * 1_000
-        
-        # 3. Xử lý dấu phẩy phân cách phần ngàn (VD: 1,784.49)
-        return float(s.replace(',', ''))
-    except:
-        return np.nan
+    if isinstance(val, str):
+        val = val.strip().replace(',', '')
+        if val.endswith('%'):
+            return float(val[:-1]) / 100.0
+        if val.endswith('B'):
+            return float(val[:-1]) * 1e9
+        if val.endswith('M'):
+            return float(val[:-1]) * 1e6
+        if val.endswith('K'):
+            return float(val[:-1]) * 1e3
+        try:
+            return float(val)
+        except ValueError:
+            return val
+    return float(val)
 
-def load_data():
+def load_data() -> dict:
     """
-    Nạp và làm sạch dữ liệu tài chính.
+    Nạp CSV, chuyển đổi sang cấu trúc MultiIndex DataFrame cho cả dòng và cột
+    và trả về dict để đưa vào Execution Sandbox cho LLM.
     """
+    # Lấy đường dẫn thư mục hiện tại của file loader.py này
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(current_dir, "TiGiaHoiDoai.csv")
+    file_path = os.path.join(current_dir, 'TiGiaHoiDoai.csv')
     
-    try:
-        # Đọc file CSV
-        df = pd.read_csv(csv_path, encoding='utf-8')
-        
-        # Tạo cột Ngày_Full để phân tích chuỗi thời gian
-        # Errors='coerce' để xử lý các ngày không hợp lệ nếu có
-        df['Ngày_Full'] = pd.to_datetime(
-            df[['Năm', 'Tháng', 'Ngày']].rename(columns={'Năm': 'year', 'Tháng': 'month', 'Ngày': 'day'}),
-            errors='coerce'
-        )
-        
-        # Danh sách các cột cần làm sạch (tất cả trừ các cột thời gian)
-        exclude_cols = ['Năm', 'Tháng', 'Ngày', 'Ngày_Full']
-        cols_to_clean = [c for s in [df.columns] for c in s if c not in exclude_cols]
-        
-        for col in cols_to_clean:
-            df[col] = df[col].apply(clean_financial_value)
-            
-        # Sắp xếp theo ngày tăng dần
-        df = df.sort_values('Ngày_Full').reset_index(drop=True)
-        
-        return {
-            "df_tai_chinh": df
-        }
-    except Exception as e:
-        print(f"Lỗi Loader Tài chính: {e}")
-        return {}
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Không tìm thấy dữ liệu tại: {file_path}")
+
+    # Đọc dữ liệu
+    df = pd.read_csv(file_path)
+
+    # Đặt MultiIndex cho dòng (Năm, Tháng, Ngày)
+    df = df.set_index(['Năm', 'Tháng', 'Ngày'])
+    df = df.sort_index(level=['Năm', 'Tháng', 'Ngày'])
+
+    # Tạo từ điển ánh xạ để build MultiIndex cho cột: (Cấp 1: Nhóm, Cấp 2: Chỉ số)
+    col_mapping = {}
+    for col in df.columns:
+        if col.startswith('[gold]'):
+            col_mapping[col] = ('Gold', col.replace('[gold] ', '').strip())
+        elif col.startswith('[VNI]'):
+            col_mapping[col] = ('VNI', col.replace('[VNI] ', '').strip())
+        elif col.startswith('[USD]'):
+            col_mapping[col] = ('USD', col.replace('[USD] ', '').strip())
+        else:
+            col_mapping[col] = ('Xăng dầu', col.strip())
+
+    # Gán MultiIndex mới cho các cột
+    df.columns = pd.MultiIndex.from_tuples([col_mapping[c] for c in df.columns], names=['Nhóm', 'Chỉ số'])
+
+    # Làm sạch toàn bộ các giá trị string thành float
+    for col in df.columns:
+        df[col] = df[col].apply(clean_numeric)
+
+    # Trả về biến df_market để LLM có thể gọi tên chính xác
+    return {
+        "df_market": df
+    }

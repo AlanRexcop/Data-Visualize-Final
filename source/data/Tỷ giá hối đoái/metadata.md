@@ -1,24 +1,17 @@
-# Bộ dữ liệu Tổng hợp Tài chính và Giá Xăng dầu (2018 - 2025)
+Dữ liệu biến `df_market` là ma trận MultiIndex Pandas DataFrame chứa thông tin giao dịch tài chính và giá cả hàng hóa.
 
-Bộ dữ liệu cung cấp cái nhìn toàn cảnh về thị trường tài chính và năng lượng tại Việt Nam theo từng ngày.
+**Cấu trúc dữ liệu:**
+- **Trục Dòng (Row Index - 3 cấp):** `Năm` (Year), `Tháng` (Month), `Ngày` (Day) - Tạo thành chuỗi thời gian liên tục.
+- **Trục Cột (Column Index - 2 cấp):** 
+  - **Cấp 1 (Nhóm hàng - Category):** Phân loại thành 4 nhóm chính là `Gold`, `VNI`, `USD`, và `Xăng dầu`.
+  - **Cấp 2 (Chỉ số - Metric):** Chi tiết các thông số của nhóm hàng đó (Giá mở phiên, Giá kết phiên, Volume, % Thay đổi, hoặc tên các loại xăng/dầu cụ thể).
 
-### Các nhóm dữ liệu chính:
-1. **Nhóm Vàng thế giới [gold]**: 
-   - Giá mở phiên, cao nhất, thấp nhất, kết phiên và khối lượng giao dịch (Volume).
-2. **Nhóm Chỉ số VN-Index [VNI]**: 
-   - Chỉ số chứng khoán Việt Nam. Bao gồm giá mở phiên trước, mở phiên, cao/thấp nhất và % thay đổi.
-3. **Nhóm Tỉ giá USD [USD]**: 
-   - Tỉ giá đô la Mỹ so với Việt Nam Đồng (VND).
-4. **Nhóm Xăng dầu**: 
-   - Giá các loại dầu DO, FO, KO và các loại xăng (E5 RON 92, RON 95-III, RON 95-IV).
+**Lưu ý về giá trị:**
+- Tất cả các giá trị số (Giá, Volume) đã được làm sạch thành định dạng số thực (float). 
+- Đơn vị `Volume` đã được quy đổi (ví dụ: `M` -> triệu, `B` -> tỷ, `K` -> nghìn).
+- Đơn vị `% Thay đổi` đã được chuyển về số thập phân (ví dụ: `1.00%` -> `0.01`).
+- Các ô không có dữ liệu giao dịch hoặc chưa cập nhật giá sẽ là `NaN`.
 
-### Các cột thời gian:
-- **Năm, Tháng, Ngày**: Thời điểm ghi nhận dữ liệu.
-- **Ngày_Full**: Cột được tạo thêm theo định dạng YYYY-MM-DD để vẽ biểu đồ thời gian.
-
-### Biến môi trường:
-Dữ liệu được nạp vào biến `df_tai_chinh`.
-
-### Lưu ý khi phân tích:
-- Một số ngày nghỉ lễ sẽ không có giá Vàng hoặc Chứng khoán (để trống).
-- Giá xăng dầu thường cập nhật theo chu kỳ điều hành, không phải thay đổi hàng ngày.
+**Ví dụ trích xuất:**
+- `df_market.loc[(2025, 12, 31), ('Gold', 'Giá khi kết phiên')]` sẽ trả về giá kết phiên của vàng vào ngày 31/12/2025.
+- `df_market['VNI']` sẽ trả về toàn bộ dữ liệu (Open, High, Low, Close, Volume, % Change) của nhóm VN-Index.

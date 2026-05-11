@@ -8,6 +8,7 @@ from services.execution import execute_code
 from services.logger import log_session
 import os
 from config import LOG_DIR
+from streamlit_ace import st_ace
 
 log_dir = LOG_DIR
 if not os.path.exists(log_dir):
@@ -116,10 +117,16 @@ with st.sidebar:
     else:
         st.info("No history yet.")
 
-# --- Main Chat Interface ---
+#  --- Main Chat Interface ---
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
+        # THÊM MỚI: Hiển thị lại Chain of Thought từ lịch sử nếu có
+        if "thought" in msg and msg["thought"] and enable_cot:
+            with st.expander("🧠 Suy luận của AI (Chain of Thought)"):
+                st.write(msg["thought"])
+                
         st.write(msg["content"])
+        
         if "fig" in msg and msg["fig"]:
             st.plotly_chart(json.loads(msg["fig"]), use_container_width=True)
         if "result" in msg and msg["result"]:
@@ -153,8 +160,15 @@ if prompt:
                 temperature=thought_level
             )
             
-            # Show Chain of Thought if requested
-            if enable_cot and "thought" in response:
+            # QUAN TRỌNG: Lưu ngay response (bao gồm cả thought) vào history chat
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": response["text"],
+                "thought": response.get("thought", "")
+            })
+            
+            # Hiển thị cho lượt chạy hiện tại
+            if enable_cot and "thought" in response and response["thought"]:
                 with st.expander("🧠 Suy luận của AI (Chain of Thought)"):
                     st.write(response["thought"])
             
@@ -164,11 +178,11 @@ if prompt:
             # Store usage
             st.session_state.last_usage = response["usage"]
             
-            # Detect if code was generated (simplified regex or block detection)
+            # Detect if code was generated
             if "```python" in response["text"]:
                 raw_code = response["text"].split("```python")[1].split("```")[0].strip()
                 st.session_state.pending_code = raw_code
-                st.rerun()
+                st.rerun() # Bây giờ gọi rerun thì thought vẫn sẽ hiện vì đã được lưu ở trên
 
 # --- Human-in-the-Loop Code Review Area ---
 # --- Human-in-the-Loop Code Review Area ---
@@ -180,11 +194,16 @@ if st.session_state.pending_code:
     if st.session_state.last_execution_error:
         st.error(f"⚠️ Lỗi thực thi lần trước:\n{st.session_state.last_execution_error}")
     
-    # Editable code area
-    edited_code = st.text_area(
-        "AI đề xuất code sau (Bạn có thể chỉnh sửa):",
+    # Editable code area with Syntax Highlighting
+    st.write("**AI đề xuất code sau (Bạn có thể chỉnh sửa):**")
+    edited_code = st_ace(
         value=st.session_state.pending_code,
-        height=250
+        language="python",
+        theme="vscode",        # Bạn có thể đổi sang 'monokai', 'github', 'twilight'...
+        keybinding="vscode",   # Hỗ trợ phím tắt như VS Code
+        font_size=14,
+        min_lines=15,          # Độ cao tối thiểu
+        key="ace_editor"
     )
     
     # Added col_fix for the new button
