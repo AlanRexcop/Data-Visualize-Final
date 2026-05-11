@@ -6,6 +6,13 @@ from services.ai_logic import AIAnalystAgent
 from services.data_registry import DataRegistry
 from services.execution import execute_code
 from services.logger import log_session
+import os
+from config import LOG_DIR
+
+log_dir = LOG_DIR
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Local AI Analyst", layout="wide")
@@ -75,6 +82,39 @@ with st.sidebar:
     for tool_name in available_tools:
         if st.checkbox(tool_name, value=True, key=f"tool_{tool_name}"):
             enabled_tools.append(tool_name)
+
+    st.divider()
+    # 4. History Archive (Option A)
+    st.subheader("📜 History Archive")
+    
+    log_file = os.path.join(LOG_DIR, "session_history.json")
+    if os.path.exists(log_file):
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                history_data = json.load(f)
+            
+            # Show the last 10 sessions, most recent first
+            for idx, entry in enumerate(reversed(history_data[-10:])):
+                timestamp = entry.get("timestamp", "").split("T")[0]
+                prompt_preview = entry.get("prompt", "No prompt")[:30] + "..."
+                
+                # Use an expander for each history item to keep sidebar clean
+                with st.expander(f"{timestamp}: {prompt_preview}"):
+                    st.write(f"**Prompt:** {entry.get('prompt')}")
+                    st.code(entry.get('final_code'), language="python")
+                    if entry.get("success"):
+                        st.success("Status: Success")
+                    else:
+                        st.error(f"Error: {entry.get('error')}")
+                    
+                    # Button to restore this code to the editor
+                    if st.button("Restore Code", key=f"restore_{idx}"):
+                        st.session_state.pending_code = entry.get('final_code')
+                        st.rerun()
+        except Exception as e:
+            st.error("Could not load history.")
+    else:
+        st.info("No history yet.")
 
 # --- Main Chat Interface ---
 for msg in st.session_state.messages:
@@ -208,3 +248,4 @@ if st.session_state.pending_code:
         st.session_state.pending_code = None
         st.session_state.last_execution_error = None
         st.rerun()
+
