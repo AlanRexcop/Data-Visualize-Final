@@ -5,7 +5,6 @@ from config import GEMINI_MODEL
 from services.ai_logic import AIAnalystAgent
 from services.data_registry import DataRegistry
 from services.execution import execute_code
-from services.logger import log_session
 import os
 from config import LOG_DIR
 from streamlit_ace import st_ace
@@ -136,180 +135,140 @@ with st.sidebar:
 tab_chat, tab_history = st.tabs(["💬 Active Chat", "📜 History Archive"])
 
 #  --- Main Chat Interface ---
-with tab_chat:    
-    for turn in st.session_state.turns:
+with tab_chat:
+    # 1. Render all previous Turns from the current conversation
+    for i, turn in enumerate(st.session_state.turns):
         with st.chat_message("user"):
             st.write(turn["user_prompt"])
             
         if turn.get("agent_response") or turn.get("chain_of_thought"):
             with st.chat_message("assistant"):
+                # Show Thought and Tools (if enabled)
                 if enable_cot and (turn.get("chain_of_thought") or turn.get("tool_calls")):
                     with st.expander("🧠 Suy luận & Tools"):
-                        st.write(turn.get("chain_of_thought", ""))
+                        if turn.get("chain_of_thought"):
+                            st.write(turn["chain_of_thought"])
                         if turn.get("tool_calls"):
+                            st.write("**Tools Executed:**")
                             st.json(turn["tool_calls"])
                 
+                # Show Text Response
                 st.write(turn.get("agent_response", ""))
                 
-                # Display results saved in the turn
+                # Show Execution Results if they exist in this turn
                 if turn.get("fig_json"):
-                    st.plotly_chart(json.loads(turn["fig_json"]), use_container_width=True)
+                    st.plotly_chart(
+                        json.loads(turn["fig_json"]), 
+                        use_container_width=True,
+                        key=f"chart_active_{i}" # Thêm key duy nhất
+                    )
                 if turn.get("result_data"):
-                    st.info(f"Result: {turn['result_data']}")
+                    st.info(f"Kết quả: {turn['result_data']}")
                 if turn.get("stdout"):
                     with st.expander("Console Output"):
                         st.code(turn["stdout"])
+                if turn.get("error"):
+                    st.error(f"Lỗi: {turn['error']}")
 
-
-    # --- Chat Input ---
-    prompt = st.chat_input("Hỏi tôi về dữ liệu hoặc yêu cầu phân tích...")
-
-    # Override prompt if triggered by the "Ask AI" button
+    # 2. Chat Input Logic
+    prompt = st.chat_input("Hỏi tôi về dữ liệu...")
     if st.session_state.auto_prompt:
         prompt = st.session_state.auto_prompt
         st.session_state.auto_prompt = None
 
     if prompt:
-        # Clear pending code and errors if a new request comes in
         st.session_state.pending_code = None
         st.session_state.last_execution_error = None
         
-        # Display user message
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.write(prompt)
+        # Create a new Turn object and add to state
+        new_turn = {
+            "timestamp": datetime.now().isoformat(),
+            "user_prompt": prompt,
+            "agent_response": None,
+            "chain_of_thought": None,
+            "tool_calls": [],
+            "raw_code": None,
+            "final_code": None,
+            "success": None,
+            "error": None,
+            "stdout": None,
+            "fig_json": None,
+            "result_data": None
+        }
+        st.session_state.turns.append(new_turn)
 
-        # Call AI
         with st.chat_message("assistant"):
             with st.spinner("Đang suy nghĩ..."):
-                # Update agent with current enabled tools/datasets
-                response = st.session_state.agent.generate_response(
-                    prompt, 
-                    active_datasets, 
-                    temperature=thought_level
-                )
+                response = st.session_state.agent.generate_response(prompt, active_datasets)
                 
-                # Lọc code ra khỏi text trả về TRƯỚC KHI lưu vào lịch sử
                 text_to_show = response["text"]
+                raw_code = None
+                
+                # Extract code if present
                 if "```python" in text_to_show:
-                    # Cắt phần trước và sau đoạn code
                     parts = text_to_show.split("```python")
                     text_before = parts[0]
                     code_and_after = parts[1].split("```", 1)
-                    
                     raw_code = code_and_after[0].strip()
                     text_after = code_and_after[1] if len(code_and_after) > 1 else ""
+                    text_to_show = f"{text_before.strip()}\n\n*(Đã trích xuất mã xuống khung Review)*\n\n{text_after.strip()}"
                     
-                    # Cập nhật lại text hiển thị trong khung chat
-                    text_to_show = f"{text_before.strip()}\n\n*(Đã trích xuất mã code xuống khung Code Review bên dưới)*\n\n{text_after.strip()}"
-                    
-                    # Gán code vào biến chờ duyệt
                     st.session_state.pending_code = raw_code
                     st.session_state.editor_key += 1
                 
-                # QUAN TRỌNG: Lưu response (text đã lọc code + thought) vào history chat
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": text_to_show,
-                    "thought": response.get("thought", "")
-                })
+                # UPDATE THE TURN with AI response data
+                current_turn = st.session_state.turns[-1]
+                current_turn["agent_response"] = text_to_show
+                current_turn["chain_of_thought"] = response.get("thought", "")
+                current_turn["tool_calls"] = response.get("tools", [])
+                current_turn["raw_code"] = raw_code
                 
-                # Hiển thị cho lượt chạy hiện tại
-                if enable_cot and "thought" in response and response["thought"]:
-                    with st.expander("🧠 Suy luận của AI (Chain of Thought)"):
-                        st.write(response["thought"])
-                
-                # Display Text response (không còn khung code tĩnh bị trùng)
-                st.write(text_to_show)
-                
-                # Store usage
                 st.session_state.last_usage = response["usage"]
-                
-                # Rerun trang web nếu có code cần review
-                if st.session_state.pending_code:
-                    st.rerun()
+                trigger_save() # <--- Save turn to JSON file
+                st.rerun()
 
-    # --- Human-in-the-Loop Code Review Area ---
+    # 3. Code Review Area (Human-in-the-loop)
     if st.session_state.pending_code:
         st.divider()
-        st.subheader("📝 Code Review (Phê duyệt thực thi)")
+        st.subheader("📝 Code Review")
         
-        # 1. Display persistent error if it exists
         if st.session_state.last_execution_error:
-            st.error(f"⚠️ Lỗi thực thi lần trước:\n{st.session_state.last_execution_error}")
+            st.error(f"⚠️ Lỗi thực thi: {st.session_state.last_execution_error}")
         
-        # Editable code area with Syntax Highlighting
-        st.write("**AI đề xuất code sau (Bạn có thể chỉnh sửa):**")
-        edited_code = st_ace(
-            value=st.session_state.pending_code,
-            language="python",
-            theme="vscode",        # Bạn có thể đổi sang 'monokai', 'github', 'twilight'...
-            keybinding="vscode",   # Hỗ trợ phím tắt như VS Code
-            font_size=14,
-            min_lines=15,          # Độ cao tối thiểu
-            key=f"ace_editor_{st.session_state.editor_key}"
-        )
+        edited_code = st_ace(value=st.session_state.pending_code, language="python", theme="vscode", key=f"ace_{st.session_state.editor_key}")
         
-        # Added col_fix for the new button
         col_run, col_fix, col_cancel = st.columns([1.5, 1.5, 4])
         
         if col_run.button("✅ Approve & Run", type="primary"):
-            # Load the actual dataframes for execution
             data_vars = st.session_state.data_registry.load_active_datasets(active_datasets)
-            
-            # Execute
             result = execute_code(edited_code, data_vars)
             
-            # Log the session
-            log_session({
-                "prompt": st.session_state.messages[-1]["content"] if st.session_state.messages else "",
-                "raw_code": st.session_state.pending_code,
-                "final_code": edited_code,
-                "success": result["error"] is None,
-                "error": result["error"]
-            })
+            # UPDATE THE TURN with execution results
+            current_turn = st.session_state.turns[-1]
+            current_turn["final_code"] = edited_code
+            current_turn["success"] = result["error"] is None
+            current_turn["error"] = result["error"]
+            current_turn["stdout"] = result["stdout"]
+            current_turn["fig_json"] = result["fig_json"]
+            current_turn["result_data"] = result["result_data"]
+            
+            trigger_save() # <--- Save results to JSON file
             
             if result["error"]:
-                # SAVE the error and keep the user's edited code in the text box
                 st.session_state.last_execution_error = result["error"]
                 st.session_state.pending_code = edited_code 
-                st.rerun()
             else:
-                # SUCCESS handling
                 st.session_state.last_execution_error = None
-                
-                if result["fig_json"]:
-                    st.plotly_chart(json.loads(result["fig_json"]), use_container_width=True)
-                if result["result_data"]:
-                    st.success(f"Kết quả: {result['result_data']}")
-                if result["stdout"]:
-                    with st.expander("Console Output"):
-                        st.code(result["stdout"])
-                        
-                # Update history with results
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": "Đã thực thi mã thành công.",
-                    "fig": result["fig_json"],
-                    "result": result["result_data"]
-                })
-                
-                # Feed result back to LLM for final analysis
                 st.session_state.agent.feed_execution_result(result)
-                
                 st.session_state.pending_code = None
-                st.rerun()
+            st.rerun()
 
-        if col_fix.button("🪄 Ask AI to fix/review"):
-            if st.session_state.last_execution_error:
-                st.session_state.auto_prompt = f"Đoạn mã này bị lỗi:\n```\n{st.session_state.last_execution_error}\n```\n\nVui lòng sửa nó. Code hiện tại:\n```python\n{edited_code}\n```"
-            else:
-                st.session_state.auto_prompt = f"Vui lòng xem xét, tiếp tục hoặc tối ưu đoạn code hiện tại của tôi:\n```python\n{edited_code}\n```"
+        if col_fix.button("🪄 Ask AI to fix"):
+            st.session_state.auto_prompt = f"Sửa lỗi/Tối ưu code này: \n```python\n{edited_code}\n```"
             st.rerun()
 
         if col_cancel.button("❌ Cancel"):
             st.session_state.pending_code = None
-            st.session_state.last_execution_error = None
             st.rerun()
 
 with tab_history:
@@ -319,13 +278,17 @@ with tab_history:
         selected_file = st.selectbox("Select Conversation:", files, format_func=lambda x: os.path.basename(x))
         hist_data = load_conversation(selected_file)
         
-        for turn in hist_data.get("turns", []):
+        for j, turn in enumerate(hist_data.get("turns", [])):
             with st.expander(f"Prompt: {turn['user_prompt'][:50]}..."):
                 st.write(f"**Full Prompt:** {turn['user_prompt']}")
                 st.divider()
                 st.write("**AI Response:**", turn.get("agent_response"))
                 if turn.get("fig_json"):
-                    st.plotly_chart(json.loads(turn["fig_json"]))
+                    st.plotly_chart(
+                        json.loads(turn["fig_json"]), 
+                        use_container_width=True,
+                        key=f"chart_hist_{j}" # Thêm key duy nhất
+                    )
                 if turn.get("final_code"):
                     st.code(turn["final_code"], language="python")
     else:

@@ -61,7 +61,7 @@ class AIAnalystAgent:
 2. MUST write explanations and comments inside the Python code IN VIETNAMESE.
 3. If you want to return interactive visualizations, assign them to a variable named `fig` using Plotly.
 4. If you have numerical/analytical findings to pass back to yourself or the user, assign them as a string to a variable named `result_data`.
-5. Assume pandas is `pd`, numpy is `np`, plotly.express is `px`. Dataframes will be pre-loaded into the namespace with their names defined in metadata.
+5. Assume pandas is `pd`, numpy is `np`, plotly.express is `px`. Dataframes will be pre-loaded into the namespace.
 """
 
     def _initialize_model(self):

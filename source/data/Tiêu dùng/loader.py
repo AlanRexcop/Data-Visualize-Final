@@ -1,44 +1,33 @@
 import pandas as pd
 import os
 
-def load_data():
+def load_data() -> dict:
     """
-    Nạp dữ liệu Chỉ số tiêu dùng từ file CSV.
-    Trả về một dictionary chứa các biến DataFrame cho sandbox.
+    Nạp CSV, chuyển đổi sang cấu trúc MultiIndex DataFrame 3D
+    và trả về dict để đưa vào Execution Sandbox cho LLM.
     """
-    # Lấy đường dẫn tuyệt đối đến file CSV cùng thư mục
+    # Lấy đường dẫn thư mục hiện tại của file loader.py này
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(current_dir, "TieuDung.csv")
+    file_path = os.path.join(current_dir, 'CPI_final_for_powerbi.csv')
     
-    # Ánh xạ từ các mã/tên chuẩn (CPI_product) sang tiêu đề cột tiếng Việt trong CSV
-    column_mapping = {
-        "year": "Năm",
-        "month": "Tháng",
-        "product_item": "Nhóm hàng",
-        "cpi_value": "Chỉ số tiêu dùng",
-        "region": "Khu vực/Vùng miền"
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Không tìm thấy dữ liệu tại: {file_path}")
+
+    # Đọc dữ liệu
+    df = pd.read_csv(file_path)
+
+    # Chuyển đổi sang dạng 3 chiều: 
+    data_3d = df.pivot_table(
+        index=['Year', 'Month'],
+        columns='Category',
+        values='Index_Value',
+        aggfunc='first'
+    )
+    
+    # Sắp xếp lại index
+    data_3d = data_3d.sort_index(level=['Year', 'Month'])
+    
+    # Trả về biến df_cpi để LLM có thể gọi tên chính xác
+    return {
+        "df_cpi": data_3d
     }
-    
-    try:
-        # Đọc dữ liệu với encoding utf-8 để hỗ trợ tiếng Việt
-        df = pd.read_csv(csv_path, encoding='utf-8')
-        
-        # Kiểm tra và nạp đúng cột dựa trên mapping
-        # Nếu file có các cột tiếng Anh, chúng ta sẽ đổi tên sang tiếng Việt để thống nhất
-        inv_map = {v: v for k, v in column_mapping.items()} # Giữ nguyên nếu đã là tiếng Việt
-        
-        # Đảm bảo cột quan trọng nhất 'Chỉ số tiêu dùng' được ép kiểu số
-        target_col = column_mapping["cpi_value"]
-        if target_col in df.columns:
-            df[target_col] = pd.to_numeric(df[target_col], errors='coerce')
-        
-        # Loại bỏ các dòng hoàn toàn trống (nếu có)
-        df = df.dropna(how='all')
-        
-        # Trả về biến df_tieu_dung để AI sử dụng
-        return {
-            "df_tieu_dung": df
-        }
-    except Exception as e:
-        print(f"Lỗi khi nạp dữ liệu tiêu dùng: {e}")
-        return {}
