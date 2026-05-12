@@ -10,6 +10,9 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 # Model Settings
 # Using gemini-3.1-flash-lite as default, easily swappable
 GEMINI_MODEL = "gemini-3.1-flash-lite"
+# GEMINI_MODEL = "gemma-4-31b-it"
+# GEMINI_MODEL = "gemini-flash-latest"
+
 
 # Directories
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -23,12 +23,12 @@ This project analyzes 22 years of Vietnam's Consumer Price Index (CPI) data (200
 conda activate Data_Lab1
 
 # Install dependencies if not already present
-pip install streamlit google-genai pandas matplotlib seaborn python-dotenv
+pip install streamlit google-genai pandas matplotlib seaborn python-dotenv streamlit-ace pytz
 ```
 
 ### 3. Run the AI Analyst Module
 ```powershell
-streamlit run scripts/ai_analyst_app.py
+streamlit run source/app.py 
 ```
 
 ## 🤖 AI Integration Standards

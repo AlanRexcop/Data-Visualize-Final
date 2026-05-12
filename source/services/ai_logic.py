@@ -61,7 +61,7 @@ class AIAnalystAgent:
 2. MUST write explanations and comments inside the Python code IN VIETNAMESE.
 3. If you want to return interactive visualizations, assign them to a variable named `fig` using Plotly.
 4. If you have numerical/analytical findings to pass back to yourself or the user, assign them as a string to a variable named `result_data`.
-5. Assume pandas is `pd`, numpy is `np`, plotly.express is `px`. Dataframes will be pre-loaded into the namespace with their exact dataset names.
+5. Assume pandas is `pd`, numpy is `np`, plotly.express is `px`. Dataframes will be pre-loaded into the namespace with their names defined in metadata.
 """
 
     def _initialize_model(self):
@@ -79,44 +79,42 @@ class AIAnalystAgent:
         Sends the prompt to the model. Includes dataset context, 
         handles multi-turn tool execution, and extracts reasoning/thoughts.
         """
-        # 1. Prepare Context
         data_context = self.get_data_context(active_datasets)
         full_prompt = f"{data_context}\n\nUser Request: {prompt}"
 
         generation_config = genai.GenerationConfig(temperature=temperature)
 
-        # 2. Initial Model Call
         response = self.chat_session.send_message(
             full_prompt, 
             generation_config=generation_config
         )
         
-        # 3. Tool Execution Loop
-        # Gemini may request one or more tool calls before providing a final answer.
+        # --- NEW: Track executed tools ---
+        executed_tools_log =[]
+        
         while response.candidates and any(part.function_call for part in response.candidates[0].content.parts):
-            # Extract the tool call
-            # Note: A single response might contain multiple function calls in some SDK versions, 
-            # but we'll handle the primary one here for stability.
             part = next(p for p in response.candidates[0].content.parts if p.function_call)
             function_call = part.function_call
             func_name = function_call.name
-            
-            # Convert Map-like args to a standard Python dict
             func_args = {key: val for key, val in function_call.args.items()}
             
-            # Find the actual python function in our registered tools
             tool_func = next((t for t in self.tools if t.__name__ == func_name), None)
             
             if tool_func:
                 try:
-                    # Execute the tool
                     tool_result = tool_func(**func_args)
                 except Exception as e:
                     tool_result = f"Error executing tool '{func_name}': {str(e)}"
             else:
                 tool_result = f"Error: Tool '{func_name}' not found in registry."
                 
-            # Send the tool output BACK to the AI to continue the conversation
+            # Log the tool call
+            executed_tools_log.append({
+                "tool": func_name,
+                "args": func_args,
+                "result": str(tool_result)
+            })
+                
             response = self.chat_session.send_message(
                 content=[{
                     "function_response": {
@@ -127,34 +125,29 @@ class AIAnalystAgent:
                 generation_config=generation_config
             )
 
-        # 4. Extract Chain of Thought (Thinking)
-        # This works for 'gemini-2.0-flash-thinking' and similar models
         thought_process = ""
         if response.candidates:
             for part in response.candidates[0].content.parts:
-                # Check for the 'thought' attribute specifically
                 if hasattr(part, "thought") and part.thought:
                     thought_process += part.thought + "\n"
-                # Some versions of the API/Models return reasoning in a detectable way
                 elif hasattr(part, "text") and "thought" in str(part).lower() and not response.text:
                      thought_process += part.text + "\n"
 
-        # 5. Extract Final Text Response
         try:
             text_response = response.text
         except ValueError:
-            # This happens if the model response has no text part (e.g. only tool calls)
             text_response = "AI did not provide a text response."
 
-        # 6. Extract Token Usage
         usage = {
             "input_tokens": response.usage_metadata.prompt_token_count,
             "output_tokens": response.usage_metadata.candidates_token_count
         }
 
+        # --- NEW: Return the tools array in the dictionary ---
         return {
             "text": text_response,
             "thought": thought_process.strip() if thought_process else "No explicit reasoning provided by the model.",
+            "tools": executed_tools_log,
             "usage": usage,
             "raw_response": response 
         }
