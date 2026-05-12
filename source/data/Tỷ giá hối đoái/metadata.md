@@ -13,5 +13,5 @@ Dữ liệu biến `df_market` là ma trận MultiIndex Pandas DataFrame chứa 
 - Các ô không có dữ liệu giao dịch hoặc chưa cập nhật giá sẽ là `NaN`.
 
 **Ví dụ trích xuất:**
-- `df_market.loc[(2025, 12, 31), ('Gold', 'Giá khi kết phiên')]` sẽ trả về giá kết phiên của vàng vào ngày 31/12/2025.
+- `df_market.loc[(2025, 12, 31), ('Gold', 'Giá kết phiên')]` sẽ trả về giá kết phiên của vàng vào ngày 31/12/2025.
 - `df_market['VNI']` sẽ trả về toàn bộ dữ liệu (Open, High, Low, Close, Volume, % Change) của nhóm VN-Index.

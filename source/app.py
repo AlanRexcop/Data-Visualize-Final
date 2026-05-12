@@ -27,11 +27,13 @@ if "data_registry" not in st.session_state:
     st.session_state.data_registry = DataRegistry()
 if "pending_code" not in st.session_state:
     st.session_state.pending_code = None
-# ADD THESE TWO LINES:
+
 if "last_execution_error" not in st.session_state:
     st.session_state.last_execution_error = None
 if "auto_prompt" not in st.session_state:
     st.session_state.auto_prompt = None
+if "editor_key" not in st.session_state:
+    st.session_state.editor_key = 0
 
 # --- Custom CSS for AI Studio feel ---
 st.markdown("""
@@ -111,6 +113,7 @@ with st.sidebar:
                     # Button to restore this code to the editor
                     if st.button("Restore Code", key=f"restore_{idx}"):
                         st.session_state.pending_code = entry.get('final_code')
+                        st.session_state.editor_key += 1 # <-- THÊM DÒNG NÀY
                         st.rerun()
         except Exception as e:
             st.error("Could not load history.")
@@ -160,10 +163,28 @@ if prompt:
                 temperature=thought_level
             )
             
-            # QUAN TRỌNG: Lưu ngay response (bao gồm cả thought) vào history chat
+            # Lọc code ra khỏi text trả về TRƯỚC KHI lưu vào lịch sử
+            text_to_show = response["text"]
+            if "```python" in text_to_show:
+                # Cắt phần trước và sau đoạn code
+                parts = text_to_show.split("```python")
+                text_before = parts[0]
+                code_and_after = parts[1].split("```", 1)
+                
+                raw_code = code_and_after[0].strip()
+                text_after = code_and_after[1] if len(code_and_after) > 1 else ""
+                
+                # Cập nhật lại text hiển thị trong khung chat
+                text_to_show = f"{text_before.strip()}\n\n*(Đã trích xuất mã code xuống khung Code Review bên dưới)*\n\n{text_after.strip()}"
+                
+                # Gán code vào biến chờ duyệt
+                st.session_state.pending_code = raw_code
+                st.session_state.editor_key += 1
+            
+            # QUAN TRỌNG: Lưu response (text đã lọc code + thought) vào history chat
             st.session_state.messages.append({
                 "role": "assistant",
-                "content": response["text"],
+                "content": text_to_show,
                 "thought": response.get("thought", "")
             })
             
@@ -172,17 +193,15 @@ if prompt:
                 with st.expander("🧠 Suy luận của AI (Chain of Thought)"):
                     st.write(response["thought"])
             
-            # Display Text response
-            st.write(response["text"])
+            # Display Text response (không còn khung code tĩnh bị trùng)
+            st.write(text_to_show)
             
             # Store usage
             st.session_state.last_usage = response["usage"]
             
-            # Detect if code was generated
-            if "```python" in response["text"]:
-                raw_code = response["text"].split("```python")[1].split("```")[0].strip()
-                st.session_state.pending_code = raw_code
-                st.rerun() # Bây giờ gọi rerun thì thought vẫn sẽ hiện vì đã được lưu ở trên
+            # Rerun trang web nếu có code cần review
+            if st.session_state.pending_code:
+                st.rerun()
 
 # --- Human-in-the-Loop Code Review Area ---
 # --- Human-in-the-Loop Code Review Area ---
@@ -203,7 +222,7 @@ if st.session_state.pending_code:
         keybinding="vscode",   # Hỗ trợ phím tắt như VS Code
         font_size=14,
         min_lines=15,          # Độ cao tối thiểu
-        key="ace_editor"
+        key=f"ace_editor_{st.session_state.editor_key}"
     )
     
     # Added col_fix for the new button
